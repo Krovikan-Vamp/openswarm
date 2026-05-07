@@ -1522,16 +1522,16 @@ const Settings: React.FC = () => {
             </Box>
           </Box>
 
-          {/* OpenAI / Compatible */}
+          {/* OpenAI-compatible */}
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography sx={labelSx}>OpenAI / Compatible</Typography>
+              <Typography sx={labelSx}>OpenAI-compatible</Typography>
               {(form.openai_api_key || form.openai_base_url) ? (
                 <Typography sx={{ fontSize: '0.6rem', fontWeight: 600, color: c.status.success, bgcolor: `${c.status.success}15`, px: 0.75, py: 0.15, borderRadius: '3px' }}>CONNECTED</Typography>
               ) : null}
             </Box>
             <Typography sx={{ ...descSx, mb: 1 }}>
-              GPT-5.4, GPT-5.4 Mini, o-series models via OpenAI — or any OpenAI-compatible endpoint such as Ollama, Cloudflare AI Gateway, or self-hosted models.
+              Any OpenAI-compatible endpoint: OpenAI (GPT-5.4, o-series), Ollama, Cloudflare AI Gateway, or self-hosted models.
             </Typography>
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1 }}>
               <TextField
