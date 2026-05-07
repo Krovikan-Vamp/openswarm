@@ -1060,12 +1060,15 @@ class AgentManager:
             if api_type == "anthropic" and getattr(global_settings, "anthropic_api_key", None):
                 options_kwargs["env"] = {"ANTHROPIC_API_KEY": global_settings.anthropic_api_key}
                 logger.info("[MCP-DEBUG] Using direct Anthropic API key")
-            elif api_type == "openai" and getattr(global_settings, "openai_api_key", None):
+            elif api_type == "openai" and (
+                getattr(global_settings, "openai_api_key", None)
+                or getattr(global_settings, "openai_base_url", None)
+            ):
                 options_kwargs["env"] = {
-                    "OPENAI_API_KEY": global_settings.openai_api_key,
+                    "OPENAI_API_KEY": global_settings.openai_api_key or "none",
                     "OPENAI_BASE_URL": global_settings.openai_base_url or "https://api.openai.com/v1",
                 }
-                logger.info("[MCP-DEBUG] Using direct OpenAI API key/base URL")
+                logger.info("[MCP-DEBUG] Using direct OpenAI-compatible API key/base URL")
             elif _9r_running():
                 env = {
                     "ANTHROPIC_API_KEY": "9router",

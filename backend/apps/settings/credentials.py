@@ -54,7 +54,15 @@ def validate_credentials(settings: AppSettings, provider: str = "anthropic") -> 
     elif p == "openai":
         if settings.openai_api_key:
             return
-        raise ValueError("OpenAI API key not configured. Set it in Settings, or connect a subscription.")
+        # A custom base URL (e.g. Ollama, Cloudflare AI Gateway) is sufficient —
+        # local or proxy endpoints often don't require a real API key.
+        if getattr(settings, "openai_base_url", None):
+            return
+        raise ValueError(
+            "OpenAI-compatible provider not configured. "
+            "Set an API key, or set a Base URL pointing to Ollama, "
+            "Cloudflare AI Gateway, or another OpenAI-compatible endpoint in Settings."
+        )
     elif p in ("gemini", "google"):
         if getattr(settings, "google_api_key", None):
             return
@@ -160,13 +168,26 @@ def get_anthropic_client(settings: AppSettings) -> anthropic.AsyncAnthropic:
 
 
 def create_openai_client(settings: AppSettings) -> AsyncOpenAI:
-    """Return a configured AsyncOpenAI client using key + optional base URL."""
+    """Return a configured AsyncOpenAI client using key + optional base URL.
+
+    Works with OpenAI, Ollama, Cloudflare AI Gateway, and any OpenAI-compatible
+    endpoint.  An API key is optional when a custom base URL is provided (e.g.
+    Ollama listens locally and does not require authentication).
+    """
     from openai import AsyncOpenAI
 
-    if not getattr(settings, "openai_api_key", None):
-        raise ValueError("OpenAI API key not configured. Set it in Settings.")
+    has_key = bool(getattr(settings, "openai_api_key", None))
+    has_base_url = bool(getattr(settings, "openai_base_url", None))
+
+    if not has_key and not has_base_url:
+        raise ValueError(
+            "OpenAI-compatible provider not configured. "
+            "Set an API key, or set a Base URL for Ollama / Cloudflare AI Gateway / "
+            "another OpenAI-compatible endpoint in Settings."
+        )
 
     return AsyncOpenAI(
-        api_key=settings.openai_api_key,
+        # Use a placeholder when no real key is supplied (Ollama, local endpoints).
+        api_key=settings.openai_api_key or "none",
         base_url=getattr(settings, "openai_base_url", None) or OPENAI_DEFAULT_BASE_URL,
     )

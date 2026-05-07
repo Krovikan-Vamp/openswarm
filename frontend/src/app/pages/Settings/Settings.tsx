@@ -1522,15 +1522,17 @@ const Settings: React.FC = () => {
             </Box>
           </Box>
 
-          {/* OpenAI */}
+          {/* OpenAI / Compatible */}
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography sx={labelSx}>OpenAI</Typography>
-              {form.openai_api_key ? (
+              <Typography sx={labelSx}>OpenAI / Compatible</Typography>
+              {(form.openai_api_key || form.openai_base_url) ? (
                 <Typography sx={{ fontSize: '0.6rem', fontWeight: 600, color: c.status.success, bgcolor: `${c.status.success}15`, px: 0.75, py: 0.15, borderRadius: '3px' }}>CONNECTED</Typography>
               ) : null}
             </Box>
-            <Typography sx={{ ...descSx, mb: 1 }}>GPT-5.4, GPT-5.4 Mini, o-series reasoning models.</Typography>
+            <Typography sx={{ ...descSx, mb: 1 }}>
+              GPT-5.4, GPT-5.4 Mini, o-series models via OpenAI — or any OpenAI-compatible endpoint such as Ollama, Cloudflare AI Gateway, or self-hosted models.
+            </Typography>
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1 }}>
               <TextField
                 type={showApiKey ? 'text' : 'password'}
@@ -1538,7 +1540,8 @@ const Settings: React.FC = () => {
                 onChange={(e) => setForm({ ...form, openai_api_key: e.target.value || null })}
                 size="small"
                 fullWidth
-                placeholder="sk-..."
+                placeholder="sk-... (leave blank for Ollama or local endpoints)"
+                label="API Key"
                 sx={{ ...fieldSx, '& .MuiOutlinedInput-root': { ...fieldSx['& .MuiOutlinedInput-root'], fontFamily: c.font.mono } }}
                 InputProps={{
                   endAdornment: (
@@ -1565,8 +1568,8 @@ const Settings: React.FC = () => {
               onChange={(e) => setForm({ ...form, openai_base_url: e.target.value || null })}
               size="small"
               fullWidth
-              placeholder="https://api.openai.com/v1"
-              label="Base URL (optional)"
+              placeholder="https://api.openai.com/v1  ·  http://localhost:11434/v1 (Ollama)  ·  Cloudflare AI Gateway URL"
+              label="Base URL (optional — for Ollama, Cloudflare AI Gateway, etc.)"
               sx={fieldSx}
             />
           </Box>
