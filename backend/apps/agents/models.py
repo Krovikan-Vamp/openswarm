@@ -2,6 +2,16 @@ from pydantic import BaseModel, Field
 from typing import Optional, Literal, Any
 from datetime import datetime
 from uuid import uuid4
+from enum import Enum
+
+
+class ModelProvider(str, Enum):
+    anthropic = "anthropic"
+    openai = "openai"
+    codex = "codex"
+    gemini_cli = "gemini-cli"
+    github_copilot = "github-copilot"
+    openrouter = "openrouter"
 
 class AgentConfig(BaseModel):
     name: str = Field(default_factory=lambda: f"Agent-{uuid4().hex[:6]}")

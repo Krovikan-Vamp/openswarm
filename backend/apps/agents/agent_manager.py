@@ -7,10 +7,10 @@ import sys
 import time
 from datetime import datetime
 from uuid import uuid4
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from backend.apps.agents.models import (
-    AgentConfig, AgentSession, Message, MessageBranch, ApprovalRequest, ToolGroupMeta,
+    AgentConfig, AgentSession, Message, MessageBranch, ApprovalRequest, ToolGroupMeta, ModelProvider,
 )
 from backend.apps.agents.ws_manager import ws_manager
 from backend.apps.modes.modes import load_mode
@@ -31,6 +31,9 @@ from backend.apps.analytics.collector import record as _analytics
 logger = logging.getLogger(__name__)
 
 os.environ.setdefault("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", "3600000")
+
+if TYPE_CHECKING:
+    from backend.apps.settings.models import AppSettings
 
 
 def _save_session(session_id: str, doc_data: dict):
@@ -126,6 +129,14 @@ class AgentManager:
     def __init__(self):
         self.sessions: dict[str, AgentSession] = {}
         self.tasks: dict[str, asyncio.Task] = {}
+
+    def _resolve_model_provider(self, model: str, settings: "AppSettings") -> str:
+        from backend.apps.agents.providers.registry import get_effective_api_type
+
+        api_type = get_effective_api_type(model, settings)
+        if api_type == ModelProvider.codex.value:
+            return ModelProvider.openai.value
+        return api_type
     
     def _resolve_mode(self, mode_id: str) -> tuple[list[str], str | None, str | None]:
         """Return (tools, system_prompt, default_folder) resolved from the mode store."""
@@ -379,7 +390,7 @@ class AgentManager:
         session = AgentSession(
             id=session_id,
             name=config.name,
-            provider=getattr(config, "provider", "anthropic"),
+            provider=self._resolve_model_provider(config.model, global_settings),
             model=config.model,
             mode=config.mode,
             system_prompt=config.system_prompt,
@@ -613,10 +624,11 @@ class AgentManager:
         # per-model usage stats (keyed by the router_model_id).
         from backend.apps.agents.providers.registry import (
             resolve_model_id_for_sdk as _resolve_model_id_early,
-            get_api_type as _get_api_type_early,
+            get_effective_api_type as _get_effective_api_type_early,
         )
-        _router_model_id = _resolve_model_id_early(session.model, load_settings())
-        _api_type_for_session = _get_api_type_early(session.model)
+        _settings_for_provider = load_settings()
+        _router_model_id = _resolve_model_id_early(session.model, _settings_for_provider)
+        _api_type_for_session = _get_effective_api_type_early(session.model, _settings_for_provider)
 
         _builtin_perms = load_builtin_permissions()
 
@@ -1026,7 +1038,7 @@ class AgentManager:
             # Reuse those values here and keep session.provider in sync.
             resolved_model = _router_model_id
             api_type = _api_type_for_session
-            session.provider = api_type
+            session.provider = self._resolve_model_provider(session.model, global_settings)
 
             options_kwargs = {
                 "model": resolved_model,
@@ -1045,9 +1057,18 @@ class AgentManager:
             # Non-Anthropic api_types always route through 9Router regardless
             # of whether an Anthropic API key is set.
             from backend.apps.nine_router import is_running as _9r_running
-            if api_type == "anthropic" and global_settings.anthropic_api_key:
+            if api_type == "anthropic" and getattr(global_settings, "anthropic_api_key", None):
                 options_kwargs["env"] = {"ANTHROPIC_API_KEY": global_settings.anthropic_api_key}
                 logger.info("[MCP-DEBUG] Using direct Anthropic API key")
+            elif api_type == "openai" and (
+                getattr(global_settings, "openai_api_key", None)
+                or getattr(global_settings, "openai_base_url", None)
+            ):
+                options_kwargs["env"] = {
+                    "OPENAI_API_KEY": global_settings.openai_api_key or "none",
+                    "OPENAI_BASE_URL": global_settings.openai_base_url or "https://api.openai.com/v1",
+                }
+                logger.info("[MCP-DEBUG] Using direct OpenAI-compatible API key/base URL")
             elif _9r_running():
                 env = {
                     "ANTHROPIC_API_KEY": "9router",
@@ -1617,8 +1638,9 @@ class AgentManager:
             # responses with placeholder text). Forking starts a new CLI
             # session so history is re-sent fresh in whichever format the
             # new provider expects.
-            from backend.apps.agents.providers.registry import get_api_type as _get_api_type_for_model
-            if _get_api_type_for_model(session.model) != _get_api_type_for_model(model):
+            global_settings = load_settings()
+            from backend.apps.agents.providers.registry import get_effective_api_type as _get_effective_api_type_for_model
+            if _get_effective_api_type_for_model(session.model, global_settings) != _get_effective_api_type_for_model(model, global_settings):
                 session.needs_fork = True
                 logger.info(f"[MCP-DEBUG] Forking session: api_type changed {session.model}→{model}")
 
@@ -1631,6 +1653,7 @@ class AgentManager:
                 "cost_so_far": session.cost_usd,
             }, session_id=session_id, dashboard_id=session.dashboard_id)
             session.model = model
+            session.provider = self._resolve_model_provider(model, global_settings)
             session_changed = True
         if mode and mode != session.mode:
             _analytics("feature.used", {

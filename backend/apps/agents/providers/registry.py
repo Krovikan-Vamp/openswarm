@@ -76,13 +76,13 @@ BUILTIN_MODELS: dict[str, list[dict[str, Any]]] = {
     # See: https://developers.openai.com/codex/models
     "OpenAI": [
         {"value": "gpt-5.4", "label": "GPT-5.4",
-         "context_window": 1_000_000, "router_model_id": "cx/gpt-5.4",
+         "context_window": 1_000_000, "model_id": "gpt-5.4", "router_model_id": "cx/gpt-5.4",
          "api": "codex", "subscription_only": True, "reasoning": True},
         {"value": "gpt-5.4-mini", "label": "GPT-5.4 Mini",
-         "context_window": 400_000, "router_model_id": "cx/gpt-5.4-mini",
+         "context_window": 400_000, "model_id": "gpt-5.4-mini", "router_model_id": "cx/gpt-5.4-mini",
          "api": "codex", "subscription_only": True, "reasoning": True},
         {"value": "gpt-5.3-codex", "label": "GPT-5.3 Codex",
-         "context_window": 400_000, "router_model_id": "cx/gpt-5.3-codex",
+         "context_window": 400_000, "model_id": "gpt-5.3-codex", "router_model_id": "cx/gpt-5.3-codex",
          "api": "codex", "subscription_only": True, "reasoning": True},
     ],
     # Google: Gemini via Gemini CLI subscription. Both 3.x (thinking-
@@ -255,6 +255,23 @@ def get_api_type(short_name: str) -> str:
     return (entry or {}).get("api", "anthropic")
 
 
+def get_effective_api_type(short_name: str, settings: AppSettings) -> str:
+    """Return runtime API type, preferring direct OpenAI-compat when configured.
+
+    Returns "openai" when an OpenAI-compatible endpoint is ready to use, meaning
+    either an API key is set or a custom base URL is configured (covers Ollama,
+    Cloudflare AI Gateway, and similar OpenAI-spec endpoints that don't require
+    a real API key).
+    """
+    api_type = get_api_type(short_name)
+    if api_type == "codex" and (
+        getattr(settings, "openai_api_key", None)
+        or getattr(settings, "openai_base_url", None)
+    ):
+        return "openai"
+    return api_type
+
+
 def resolve_model_id_for_sdk(short_name: str, settings: AppSettings) -> str:
     """Resolve a short model name into the id string passed to ClaudeAgentOptions.
 
@@ -267,6 +284,11 @@ def resolve_model_id_for_sdk(short_name: str, settings: AppSettings) -> str:
     if entry is None:
         return short_name
     if entry.get("api") == "anthropic" and getattr(settings, "anthropic_api_key", None):
+        return entry.get("model_id", short_name)
+    if entry.get("api") in ("openai", "codex") and (
+        getattr(settings, "openai_api_key", None)
+        or getattr(settings, "openai_base_url", None)
+    ):
         return entry.get("model_id", short_name)
     return entry.get("router_model_id", entry.get("model_id", short_name))
 
@@ -346,6 +368,11 @@ def create_provider(
     Custom providers use OpenAI-compat with user's base_url.
     """
     api_type = _get_api_type(provider_name)
+    if api_type == "codex" and (
+        getattr(settings, "openai_api_key", None)
+        or getattr(settings, "openai_base_url", None)
+    ):
+        api_type = "openai"
 
     # Check for 9Router first
     if provider_name in ("9Router", "9router"):
@@ -386,12 +413,21 @@ def create_provider(
 
     if api_type == "openai":
         from backend.apps.agents.providers.openai_compat import OpenAICompatProvider
-        if settings.openai_api_key:
-            return OpenAICompatProvider(api_key=settings.openai_api_key, base_url="https://api.openai.com/v1")
-        # No API key — try 9Router as fallback
+        has_key = bool(settings.openai_api_key)
+        has_base_url = bool(getattr(settings, "openai_base_url", None))
+        if has_key or has_base_url:
+            return OpenAICompatProvider(
+                api_key=settings.openai_api_key or "none",
+                base_url=getattr(settings, "openai_base_url", None) or "https://api.openai.com/v1",
+            )
+        # No key or base URL — try 9Router as fallback
         if _is_9router_available():
             return OpenAICompatProvider(api_key="9router", base_url="http://localhost:20128/v1")
-        raise ValueError("OpenAI API key not configured. Set it in Settings, or connect 9Router.")
+        raise ValueError(
+            "OpenAI-compatible provider not configured. "
+            "Set an API key, or set a Base URL for Ollama / Cloudflare AI Gateway / "
+            "another OpenAI-compatible endpoint in Settings."
+        )
 
     if api_type == "gemini":
         from backend.apps.agents.providers.gemini import GeminiProvider
@@ -470,8 +506,8 @@ def _has_credentials(provider_name: str, settings: AppSettings) -> bool:
         if getattr(settings, "connection_mode", "own_key") == "managed":
             return bool(getattr(settings, "openswarm_auth_token", None))
         return bool(settings.anthropic_api_key)
-    if api_type == "openai":
-        return bool(settings.openai_api_key)
+    if api_type in ("openai", "codex"):
+        return bool(settings.openai_api_key) or bool(getattr(settings, "openai_base_url", None))
     if api_type == "gemini":
         return bool(getattr(settings, "google_api_key", None))
     if api_type == "openrouter":
