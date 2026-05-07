@@ -1531,7 +1531,7 @@ const Settings: React.FC = () => {
               ) : null}
             </Box>
             <Typography sx={{ ...descSx, mb: 1 }}>GPT-5.4, GPT-5.4 Mini, o-series reasoning models.</Typography>
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1 }}>
               <TextField
                 type={showApiKey ? 'text' : 'password'}
                 value={form.openai_api_key ?? ''}
@@ -1560,6 +1560,15 @@ const Settings: React.FC = () => {
                 Get key <OpenInNewIcon sx={{ fontSize: 11 }} />
               </Typography>
             </Box>
+            <TextField
+              value={form.openai_base_url ?? ''}
+              onChange={(e) => setForm({ ...form, openai_base_url: e.target.value || null })}
+              size="small"
+              fullWidth
+              placeholder="https://api.openai.com/v1"
+              label="Base URL (optional)"
+              sx={fieldSx}
+            />
           </Box>
 
           {/* Google */}

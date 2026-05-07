@@ -38,6 +38,7 @@ export interface AppSettings {
   new_agent_shortcut: string;
   anthropic_api_key: string | null;
   openai_api_key?: string | null;
+  openai_base_url?: string | null;
   google_api_key?: string | null;
   openrouter_api_key?: string | null;
   custom_providers?: CustomProvider[];
@@ -75,6 +76,7 @@ const initialState: SettingsState = {
     theme: 'dark',
     new_agent_shortcut: 'Meta+l',
     anthropic_api_key: null,
+    openai_base_url: null,
     browser_homepage: 'https://www.google.com',
     auto_select_mode_on_new_agent: false,
     expand_new_chats_in_dashboard: false,

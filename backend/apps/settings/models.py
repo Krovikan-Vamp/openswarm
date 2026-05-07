@@ -41,6 +41,7 @@ class AppSettings(BaseModel):
     theme: str = "dark"
     new_agent_shortcut: str = "Meta+l"
     anthropic_api_key: Optional[str] = None
+    openai_base_url: Optional[str] = None
     browser_homepage: str = "https://www.google.com"
     # Multi-provider API keys
     openai_api_key: Optional[str] = None

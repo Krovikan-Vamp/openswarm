@@ -10,9 +10,11 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import anthropic
+    from openai import AsyncOpenAI
     from backend.apps.settings.models import AppSettings
 
 OPENSWARM_DEFAULT_PROXY_URL = "https://api.openswarm.ai"
+OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
 
 def _check_9router() -> bool:
@@ -89,7 +91,10 @@ def get_provider_credentials(settings: AppSettings, provider: str) -> dict[str, 
         return {"api_key": settings.anthropic_api_key or ""}
 
     if p in ("openai", "codex"):
-        return {"api_key": settings.openai_api_key or ""}
+        return {
+            "api_key": settings.openai_api_key or "",
+            "base_url": getattr(settings, "openai_base_url", None) or OPENAI_DEFAULT_BASE_URL,
+        }
 
     if p in ("gemini", "google", "gemini-cli"):
         return {"api_key": getattr(settings, "google_api_key", "") or ""}
@@ -152,3 +157,16 @@ def get_anthropic_client(settings: AppSettings) -> anthropic.AsyncAnthropic:
         )
 
     raise ValueError("No AI provider configured. Set an API key or connect a subscription.")
+
+
+def create_openai_client(settings: AppSettings) -> AsyncOpenAI:
+    """Return a configured AsyncOpenAI client using key + optional base URL."""
+    from openai import AsyncOpenAI
+
+    if not getattr(settings, "openai_api_key", None):
+        raise ValueError("OpenAI API key not configured. Set it in Settings.")
+
+    return AsyncOpenAI(
+        api_key=settings.openai_api_key,
+        base_url=getattr(settings, "openai_base_url", None) or OPENAI_DEFAULT_BASE_URL,
+    )

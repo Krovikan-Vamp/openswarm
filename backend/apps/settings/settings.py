@@ -27,6 +27,21 @@ async def settings_lifespan():
 settings = SubApp("settings", settings_lifespan)
 
 
+def _apply_env_defaults(app_settings: AppSettings) -> AppSettings:
+    """Fill missing provider settings from environment variables."""
+    env_defaults = {
+        "anthropic_api_key": os.environ.get("ANTHROPIC_API_KEY"),
+        "openai_api_key": os.environ.get("OPENAI_API_KEY"),
+        "openai_base_url": os.environ.get("OPENAI_BASE_URL"),
+        "google_api_key": os.environ.get("GOOGLE_API_KEY"),
+        "openrouter_api_key": os.environ.get("OPENROUTER_API_KEY"),
+    }
+    for key, value in env_defaults.items():
+        if value and not getattr(app_settings, key, None):
+            setattr(app_settings, key, value)
+    return app_settings
+
+
 def load_settings() -> AppSettings:
     """Load settings from JSON file, returning defaults if not found."""
     if os.path.exists(SETTINGS_FILE):
@@ -34,8 +49,8 @@ def load_settings() -> AppSettings:
             settings = AppSettings(**json.load(f))
         if settings.default_system_prompt is None:
             settings.default_system_prompt = DEFAULT_SYSTEM_PROMPT
-        return settings
-    return AppSettings()
+        return _apply_env_defaults(settings)
+    return _apply_env_defaults(AppSettings())
 
 
 def _save_settings(settings_obj: AppSettings):
