@@ -7,7 +7,7 @@ import sys
 import time
 from datetime import datetime
 from uuid import uuid4
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from backend.apps.agents.models import (
     AgentConfig, AgentSession, Message, MessageBranch, ApprovalRequest, ToolGroupMeta, ModelProvider,
@@ -31,6 +31,9 @@ from backend.apps.analytics.collector import record as _analytics
 logger = logging.getLogger(__name__)
 
 os.environ.setdefault("CLAUDE_CODE_STREAM_CLOSE_TIMEOUT", "3600000")
+
+if TYPE_CHECKING:
+    from backend.apps.settings.models import AppSettings
 
 
 def _save_session(session_id: str, doc_data: dict):
@@ -127,14 +130,12 @@ class AgentManager:
         self.sessions: dict[str, AgentSession] = {}
         self.tasks: dict[str, asyncio.Task] = {}
 
-    def _resolve_model_provider(self, model: str, settings) -> str:
+    def _resolve_model_provider(self, model: str, settings: "AppSettings") -> str:
         from backend.apps.agents.providers.registry import get_effective_api_type
 
         api_type = get_effective_api_type(model, settings)
         if api_type == ModelProvider.codex.value:
             return ModelProvider.openai.value
-        if api_type in (ModelProvider.anthropic.value, ModelProvider.openai.value):
-            return api_type
         return api_type
     
     def _resolve_mode(self, mode_id: str) -> tuple[list[str], str | None, str | None]:
@@ -1056,13 +1057,13 @@ class AgentManager:
             # Non-Anthropic api_types always route through 9Router regardless
             # of whether an Anthropic API key is set.
             from backend.apps.nine_router import is_running as _9r_running
-            if api_type == "anthropic" and global_settings.anthropic_api_key:
+            if api_type == "anthropic" and getattr(global_settings, "anthropic_api_key", None):
                 options_kwargs["env"] = {"ANTHROPIC_API_KEY": global_settings.anthropic_api_key}
                 logger.info("[MCP-DEBUG] Using direct Anthropic API key")
-            elif api_type == "openai" and global_settings.openai_api_key:
+            elif api_type == "openai" and getattr(global_settings, "openai_api_key", None):
                 options_kwargs["env"] = {
-                    "ANTHROPIC_API_KEY": global_settings.openai_api_key,
-                    "ANTHROPIC_BASE_URL": global_settings.openai_base_url or "https://api.openai.com/v1",
+                    "OPENAI_API_KEY": global_settings.openai_api_key,
+                    "OPENAI_BASE_URL": global_settings.openai_base_url or "https://api.openai.com/v1",
                 }
                 logger.info("[MCP-DEBUG] Using direct OpenAI API key/base URL")
             elif _9r_running():
